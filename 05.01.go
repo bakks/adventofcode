@@ -9,6 +9,20 @@ import (
 	"strings"
 )
 
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
 func readFile(filename string) []string {
 	f, err := os.OpenFile(filename, os.O_RDONLY, 0)
 	if err != nil {
@@ -35,152 +49,122 @@ func readFile(filename string) []string {
 	return lines
 }
 
-const BingoBoardSize = 5
-
-type BingoBoard struct {
-	board [][]int
-	marks [][]bool
+type VentMap struct {
+	vents [][]int
 }
 
-func (this BingoBoard) mark(mark int) {
-	for i := 0; i < len(this.board); i++ {
-		for j := 0; j < len(this.board[i]); j++ {
-			if this.board[i][j] == mark {
-				this.marks[i][j] = true
-				return
+func NewVentMap(size int) VentMap {
+	vents := make([][]int, size)
+	for i, _ := range vents {
+		vents[i] = make([]int, size)
+	}
+
+	return VentMap{vents}
+}
+
+func (this VentMap) AddVent(x1, y1, x2, y2 int) {
+	if x1 == x2 {
+		yMin := min(y1, y2)
+		yMax := max(y1, y2)
+
+		for y := yMin; y <= yMax; y++ {
+			this.vents[x1][y]++
+		}
+	} else if y1 == y2 {
+		xMin := min(x1, x2)
+		xMax := max(x1, x2)
+
+		for x := xMin; x <= xMax; x++ {
+			this.vents[x][y1]++
+		}
+	} else {
+		xMin := min(x1, x2)
+		xMax := max(x1, x2)
+		yMin := min(y1, y2)
+		yMax := max(y1, y2)
+		fmt.Printf("%d,%d -> %d,%d\n", x1, y1, x2, y2)
+
+		if yMax-yMin != xMax-xMin {
+			log.Fatalf("Not diagonal: %d,%d -> %d,%d\n", x1, y1, x2, y2)
+		}
+
+		x, y := x1, y1
+		for x != x2 {
+			this.vents[x][y]++
+			if x1 < x2 {
+				x++
+			} else {
+				x--
+			}
+			if y1 < y2 {
+				y++
+			} else {
+				y--
+			}
+		}
+		this.vents[x][y]++
+
+	}
+}
+
+func (this VentMap) Print(distance int) {
+	for x := 0; x < distance; x++ {
+		for y := 0; y < distance; y++ {
+			n := this.vents[y][x]
+			if n == 0 {
+				fmt.Printf(".")
+			} else {
+				fmt.Printf("%d", this.vents[y][x])
+			}
+		}
+		fmt.Printf("\n")
+	}
+}
+
+func (this VentMap) CountDangers() int {
+	n := 0
+
+	for _, ventRow := range this.vents {
+		for _, ventCount := range ventRow {
+			if ventCount > 1 {
+				n++
 			}
 		}
 	}
+
+	return n
 }
 
-func (this BingoBoard) sumUnmarked() int {
-	x := 0
-	for i := 0; i < len(this.board); i++ {
-		for j := 0; j < len(this.board); j++ {
-			if !this.marks[i][j] {
-				x += this.board[i][j]
-			}
-		}
-	}
+func parseVents(in []string) VentMap {
+	vents := NewVentMap(1000)
 
-	return x
-}
-
-func (this BingoBoard) hasWon() bool {
-	// check horizontals
-	for i := 0; i < len(this.board); i++ {
-		j := 0
-		for ; j < len(this.board); j++ {
-			if !this.marks[i][j] {
-				break
-			}
-		}
-		if j == len(this.board) {
-			return true
-		}
-	}
-
-	// check verticals
-	for i := 0; i < len(this.board); i++ {
-		j := 0
-		for ; j < len(this.board); j++ {
-			if !this.marks[j][i] {
-				break
-			}
-		}
-		if j == len(this.board) {
-			return true
-		}
-	}
-
-	return false
-}
-
-func BingoBoardFromFileInput(lines []string) BingoBoard {
-	if len(lines) != BingoBoardSize {
-		log.Fatalf("Expected board if size %d, received %d lines\n", BingoBoardSize, len(lines))
-	}
-
-	board := [][]int{}
-
-	for _, line := range lines {
-		numbers := strings.Fields(line)
-		if len(numbers) != BingoBoardSize {
-			log.Fatalf("Line of size %d : %s\n", len(numbers), line)
+	for _, line := range in {
+		fields := strings.Fields(line)
+		if len(fields) < 3 {
+			log.Fatal(line)
 		}
 
-		boardLine := []int{}
-		for i := 0; i < BingoBoardSize; i++ {
-			n, err := strconv.Atoi(numbers[i])
-			if err != nil {
-				log.Fatal(err)
-			}
-			boardLine = append(boardLine, n)
+		one := strings.Split(fields[0], ",")
+		two := strings.Split(fields[2], ",")
+		x1, err1 := strconv.Atoi(one[0])
+		y1, err2 := strconv.Atoi(one[1])
+		x2, err3 := strconv.Atoi(two[0])
+		y2, err4 := strconv.Atoi(two[1])
+
+		if err1 != nil || err2 != nil || err3 != nil || err4 != nil {
+			log.Fatal(line)
 		}
-		board = append(board, boardLine)
+
+		vents.AddVent(x1, y1, x2, y2)
 	}
 
-	marks := make([][]bool, BingoBoardSize)
-	for i := range marks {
-		marks[i] = make([]bool, BingoBoardSize)
-	}
-
-	return BingoBoard{board, marks}
-}
-
-func parseBingo(in []string) ([]int, []BingoBoard) {
-	moves := []int{}
-
-	// parse the top line containing the moves
-	for _, stringNum := range strings.Split(in[0], ",") {
-		n, err := strconv.Atoi(stringNum)
-		if err != nil {
-			log.Fatal(err)
-		}
-		moves = append(moves, n)
-	}
-
-	boards := []BingoBoard{}
-
-	// iterate through specific boards
-	for i := 1; i < len(in); i += BingoBoardSize + 1 {
-		boardLines := in[i+1 : i+1+BingoBoardSize]
-		board := BingoBoardFromFileInput(boardLines)
-		boards = append(boards, board)
-	}
-
-	return moves, boards
+	return vents
 }
 
 func main() {
-	lines := readFile("04.txt")
-	moves, boards := parseBingo(lines)
-	log.Printf("Found %d boards\n", len(boards))
-	lastWinner := BingoBoard{}
-	lastWinningMove := -1
+	lines := readFile("05.txt")
+	vents := parseVents(lines)
 
-	for i, move := range moves {
-		log.Printf("Move: %d\n", move)
-		winners := []int{}
-		nextBoards := []BingoBoard{}
-
-		for j, board := range boards {
-			board.mark(move)
-
-			if i >= BingoBoardSize && board.hasWon() {
-				lastWinner = board
-				lastWinningMove = move
-				winners = append(winners, j)
-			} else {
-				nextBoards = append(nextBoards, board)
-			}
-		}
-
-		boards = nextBoards
-	}
-
-	fmt.Print(lastWinner)
-	sum := lastWinner.sumUnmarked()
-	score := sum * lastWinningMove
-	fmt.Printf("Sum: %d, Score: %d\n", sum, score)
+	fmt.Println(vents.CountDangers())
+	vents.Print(10)
 }
